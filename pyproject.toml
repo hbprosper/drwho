@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "drwho"
+dynamic = ["version"]
+description = "Shared utilities for Harrison Prosper's physics and ML course repositories"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{name = "Harrison B. Prosper", email = "hprosper@fsu.edu"}]
+dependencies = [
+    "numpy",
+    "scipy",
+    "pandas",
+    "matplotlib",
+    "torch",
+    "requests",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+tensorboard = ["tensorboard"]
+
+[project.urls]
+Homepage = "https://github.com/hbprosper/drwho"
+
+[tool.setuptools]
+packages = ["drwho", "drwho.bin"]
+
+[tool.setuptools.dynamic]
+version = {attr = "drwho.__version__"}
+
+[project.scripts]
+monlosses = "drwho.bin.monitor_losses:main"

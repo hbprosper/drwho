@@ -1,0 +1,14 @@
+# Jupyter
+.ipynb_checkpoints/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# macOS
+.DS_Store
