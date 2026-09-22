@@ -9,6 +9,7 @@
 # Created: Mon Aug 25 2025
 # Updated: Sat Sep 05 2026 HBP: add keyword dirpath to Config
 # Updated: Tue Sep 22 2026 HBP: add file/config key to Config
+# Updated: Tue Sep 22 2026 HBP: drop file/script (TorchScript retired)
 # ----------------------------------------------------------------------------
 import os, sys, re
 import numpy as np
@@ -330,12 +331,16 @@ class Config:
             o_cfg = self.cfg['file']
             o_cfg['losses']     = f'{self.logdir}{name}_losses.csv'
             o_cfg['params']     = f'{self.logdir}{name}_params.pth'
-            o_cfg['script']     = f'{self.logdir}{name}_script.pth'
             o_cfg['init_params']= f'{self.logdir}{name}_init_params.pth'
             o_cfg['plots']      = f'{self.logdir}{name}_plots.png'
 
             # the configuration file is the one we were handed
             o_cfg['config']     = self.cfg_filename
+
+            # 'script' held a TorchScript archive written by torch.jit.save,
+            # which is deprecated. Drop it from configurations written before
+            # version 0.3.0 so it does not linger with a stale path.
+            o_cfg.pop('script', None)
 
         else:
             # this not a yaml file specification, assume it is a name stub
@@ -372,7 +377,6 @@ class Config:
 
             o_cfg['losses']     = f'{self.logdir}{name}_losses.csv'
             o_cfg['params']     = f'{self.logdir}{name}_params.pth'
-            o_cfg['script']     = f'{self.logdir}{name}_script.pth'
             o_cfg['init_params']= f'{self.logdir}{name}_init_params.pth'
             o_cfg['plots']      = f'{self.logdir}{name}_plots.png'
             o_cfg['config']     = self.cfg_filename
