@@ -8,6 +8,7 @@
 # Harrison B. Prosper
 # Created: Mon Aug 25 2025
 # Updated: Sat Sep 05 2026 HBP: add keyword dirpath to Config
+# Updated: Tue Sep 22 2026 HBP: add file/config key to Config
 # ----------------------------------------------------------------------------
 import os, sys, re
 import numpy as np
@@ -275,6 +276,9 @@ class Config:
         Manage simple ML application configuration
 
           name:      name stub for all files, including the yaml file
+          file/config: name of the yaml configuration file. If a yaml file
+                     was given to the constructor this is that file,
+                     otherwise it is <logdir><name>_config.yaml
           batchsize: 
           base_lr:   base learning rate
             :
@@ -330,6 +334,9 @@ class Config:
             o_cfg['init_params']= f'{self.logdir}{name}_init_params.pth'
             o_cfg['plots']      = f'{self.logdir}{name}_plots.png'
 
+            # the configuration file is the one we were handed
+            o_cfg['config']     = self.cfg_filename
+
         else:
             # this not a yaml file specification, assume it is a name stub
             # and build a Python dictionary to store configuration data.
@@ -358,18 +365,19 @@ class Config:
             # construct output file names    
             o_cfg = {}
 
+            # the yaml configuration file follows the same naming pattern as
+            # the other standard files. It is also the default filename used
+            # by the save method.
+            self.cfg_filename   = f'{self.logdir}{name}_config.yaml'
+
             o_cfg['losses']     = f'{self.logdir}{name}_losses.csv'
             o_cfg['params']     = f'{self.logdir}{name}_params.pth'
             o_cfg['script']     = f'{self.logdir}{name}_script.pth'
             o_cfg['init_params']= f'{self.logdir}{name}_init_params.pth'
             o_cfg['plots']      = f'{self.logdir}{name}_plots.png'
+            o_cfg['config']     = self.cfg_filename
 
             cfg['file'] = o_cfg
-    
-            # create a default name for yaml configuration file
-            # this name will be used if a filename is not
-            # specified in the save method
-            self.cfg_filename = f'{self.logdir}{name}_config.yaml'
     
         if verbose:
             print(self.__str__())
@@ -391,7 +399,13 @@ class Config:
         # require .yaml extension
         if not (filename.endswith('.yaml') or filename.endswith('.yml')):
             raise NameError('the output file must have extension .yaml')
-            
+
+        # keep file/config in step with where we are actually writing, so that
+        # a saved configuration always names itself correctly
+        self.cfg_filename = filename
+        if 'file' in self.cfg:
+            self.cfg['file']['config'] = filename
+
         # save to yaml file
         open(filename, 'w').write(self.__str__())
         
