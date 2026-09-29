@@ -7,6 +7,7 @@
 #
 # Harrison B. Prosper
 # Created: Mon Aug 25 2025
+# Updated: Tue Sep 29 2026 HBP: download() creates the target folder
 # ----------------------------------------------------------------------------
 import os, sys, re
 import numpy as np
@@ -30,6 +31,11 @@ def download(datafile,
     dirname, filename = os.path.split(datafile)
     dirname = os.path.abspath(dirname)
     cwd     = os.path.abspath(os.getcwd())
+
+    # create the destination folder if it does not yet exist, so that a
+    # download into, say, 'data/file.h5' works in a fresh clone or on Colab.
+    os.makedirs(dirname, exist_ok=True)
+
     os.chdir(dirname)
 
     url = f'{website}/{filename}'
