@@ -5,8 +5,10 @@
 # Updated: Jun 12 2026 - Use tensorboard by default, if installed.
 # Updated: Aug 21 2026 - Use standalone monitor by defualt!
 # Updated: Sep 22 2026 - Import tensorboard lazily.
+# Updated: Oct  4 2026 - Draw in the notebook when there is no display.
 #-------------------------------------------------------------------------
 import os, sys, re
+import subprocess
 import numpy as np
 from time import sleep
 from pathlib import Path
@@ -37,6 +39,7 @@ LOG_SWITCH = 3
 CHECK = "\u2705"
 FAIL  = "\u274C"
 WARN  = "\u26A0"
+FONTSIZE = 14
 #-------------------------------------------------------------------------
 # The loss file should be a simple text file with olumns of numbers:
 #
@@ -254,6 +257,33 @@ class LossMonitor:
         plt.show()
         print('\nciao!')
 #--------------------------------------------------------------------
+def _has_display():
+    '''
+    Return True if a GUI window can plausibly be opened on this machine.
+
+    Google Colab and other headless sessions cannot pop up a window, so the
+    Monitor must not launch the standalone monitor process there: it would
+    die at once, and because its output is discarded the failure would be
+    silent.
+    '''
+    if 'google.colab' in sys.modules:
+        return False
+
+    # macOS and Windows manage their own windows. On Linux an unset DISPLAY
+    # means there is no X server to draw on.
+    if sys.platform.startswith('linux') and not os.environ.get('DISPLAY'):
+        return False
+
+    return True
+
+def _in_notebook():
+    '''Return True if running inside IPython, Jupyter or Colab.'''
+    try:
+        from IPython import get_ipython
+        return get_ipython() is not None
+    except Exception:
+        return False
+
 def _summary_writer():
     '''
     Return tensorboard's SummaryWriter class, or None if tensorboard is not
@@ -311,6 +341,7 @@ class Monitor:
         # runs_pathname = p.parent.resolve()
 
         self.writer = None
+        self.inline = False   # draw in the notebook instead of a window
         if use_tensorboard:
             # import tensorboard only now, when it has actually been asked for
             SummaryWriter = _summary_writer()
@@ -384,7 +415,9 @@ class Monitor:
             
         timeleft_str = self.timeleft(jj, line)
 
-        if same_line:
+        if self.inline:
+            self._inline_update(timeleft_str)
+        elif same_line:
             print(f'\r{timeleft_str}', end='')
         else:
             print(timeleft_str)
@@ -423,34 +456,116 @@ class Monitor:
         self.timeleft = TimeLeft(self.niterations)
 
     def start(self):
-        if self.writer is None:
-            import subprocess
 
         self.reset()
 
-        if self.writer is None:
+        if self.writer is not None:
+            # tensorboard is handling the display
+            return
+
+        if _has_display():
+            # a GUI window is possible: launch the standalone monitor
             cmd = ["monlosses", self.lossfile]
             if self.ylabel != None:
                 cmd.append(self.ylabel)
             print(' '.join(cmd))
-            
+
             self.p = subprocess.Popen(cmd,
                                       stdout=subprocess.DEVNULL,
-                                      stderr=subprocess.DEVNULL, 
-                                      start_new_session=True  )
-        
+                                      stderr=subprocess.DEVNULL,
+                                      start_new_session=True)
+
+        elif _in_notebook():
+            # Colab, or any headless notebook: no window can be opened, so
+            # draw the loss curve in the output cell instead.
+            self.inline = True
+            print('\tNo display available; '
+                  'drawing the loss curve in the notebook.')
+
+        else:
+            # headless and not a notebook: there is nothing to draw on
+            print(f'{WARN} No display and not a notebook. Losses are being '
+                  f'written to\n\t{self.lossfile}\n\tbut not displayed. '
+                  'Run "monlosses <lossfile>" elsewhere to watch them.')
+
+    def _inline_update(self, status=''):
+        '''
+        Redraw the loss curve inside the notebook output cell.
+
+        Used when no GUI window can be opened (Google Colab, or any headless
+        notebook), where the standalone monitor process cannot work.
+        '''
+        try:
+            from IPython.display import clear_output, display, Image
+        except ImportError:
+            if status:
+                print(status)
+            return
+
+        # Build the figure with a bare Figure + Agg canvas rather than
+        # pyplot: no global state, no backend switching, nothing to close.
+        import io
+        from matplotlib.figure import Figure
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+
+        losses = get_losses(self.lossfile)
+
+        clear_output(wait=True)
+
+        if losses is not None and len(losses[0]) > 1:
+
+            xx, yy_t, yy_v = losses
+
+            fig = Figure(figsize=(6, 6 * 9 / 16))
+            ax  = fig.add_subplot(1, 1, 1)
+
+            ax.plot(xx, yy_t, color='red',  lw=1, label='training loss')
+            ax.plot(xx, yy_v, color='blue', lw=1, label='validation loss')
+            ax.legend()
+            ax.set_xlabel('iterations', fontsize=FONTSIZE)
+            ax.set_ylabel('average loss' if self.ylabel is None else self.ylabel,
+                          fontsize=FONTSIZE)
+
+            if len(xx) > LOG_SWITCH:
+                ax.set_xscale('log')
+                ax.set_yscale('log')
+
+            ax.grid(True, which='both', linestyle='-')
+            fig.tight_layout()
+
+            # Render the PNG here rather than handing IPython the Figure:
+            # IPython only knows how to draw a Figure once pyplot has been
+            # imported and registered a formatter for it, which a library
+            # cannot assume has happened.
+            buf = io.BytesIO()
+            FigureCanvasAgg(fig).print_png(buf)
+            display(Image(data=buf.getvalue()))
+
+        if status:
+            print(status)
 
     def terminate(self, delay=5):
+
+        if self.inline:
+            # drawing in the notebook: one final redraw, nothing to tear down
+            self._inline_update()
+            print('\tDone!')
+            return
 
         mp.use(self.original_backend, force=True)
 
         sleep(delay)
-        
+
         if self.writer is None:
-            
+
+            if not hasattr(self, 'p'):
+                # no standalone monitor was ever started (no display and no
+                # notebook), so there is nothing to shut down
+                return
+
             # kill standalone monitoring process
             try:
-                print('\n\tTerminating standalone loss monitor...')        
+                print('\n\tTerminating standalone loss monitor...')
                 self.p.terminate()
                 try:
                     self.p.wait(timeout=5)
@@ -459,7 +574,7 @@ class Monitor:
                     self.p.wait()
                 print('\tDone!')
             except:
-                print('\tNone stated in this session!')
+                print('\tNone started in this session!')
 
         else:
             self.writer.flush()
