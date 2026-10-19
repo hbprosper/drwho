@@ -6,6 +6,8 @@
 # Updated: Aug 21 2026 - Use standalone monitor by defualt!
 # Updated: Sep 22 2026 - Import tensorboard lazily.
 # Updated: Oct  4 2026 - Draw in the notebook when there is no display.
+# Updated: Oct 19 2026 - Fix: record the best validation loss (min_avloss typo),
+#                         so params are saved only when the loss improves.
 #-------------------------------------------------------------------------
 import os, sys, re
 import subprocess
@@ -367,7 +369,7 @@ class Monitor:
         
         loss_decreased = v_loss < (1 - self.frac) * self.minavloss
         if loss_decreased:
-            self.min_avloss = v_loss
+            self.minavloss = v_loss   # remember the new best validation loss
         v_best_loss = self.minavloss
         
         # update loss file
