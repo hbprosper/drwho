@@ -175,7 +175,7 @@ class FCNN(Model):
                  n_hidden=4, 
                  n_width=32,
                  n_outputs=1,
-                 f_hidden=Sin, 
+                 f_hidden=Sin(), 
                  f_output=None):
         
         super().__init__()
@@ -187,11 +187,11 @@ class FCNN(Model):
         self.f_hidden = f_hidden
         self.f_output = f_output
         
-        cmd  = 'nn.Sequential(nn.Linear(n_inputs, n_width), f_hidden(), '
-        cmd += ', '.join(['nn.Linear(n_width, n_width), f_hidden()' 
+        cmd  = 'nn.Sequential(nn.Linear(n_inputs, n_width), f_hidden, '
+        cmd += ', '.join(['nn.Linear(n_width, n_width), f_hidden' 
                           for _ in range(n_hidden-1)])
         if f_output:
-            cmd += ', nn.Linear(n_width, n_outputs), f_output())'
+            cmd += ', nn.Linear(n_width, n_outputs), f_output'
         else:
             cmd += ', nn.Linear(n_width, n_outputs))'
         cmd  = cmd.replace(', ,', ', ') # Hack!
