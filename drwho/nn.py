@@ -173,7 +173,8 @@ class FCNN(Model):
     def __init__(self, 
                  n_inputs, 
                  n_hidden=4, 
-                 n_width=32, 
+                 n_width=32,
+                 n_outputs=1,
                  f_hidden=Sin, 
                  f_output=None):
         
@@ -182,6 +183,7 @@ class FCNN(Model):
         self.n_inputs = n_inputs
         self.n_hidden = n_hidden
         self.n_width  = n_width
+        self.n_outputs= n_outputs
         self.f_hidden = f_hidden
         self.f_output = f_output
         
@@ -189,9 +191,9 @@ class FCNN(Model):
         cmd += ', '.join(['nn.Linear(n_width, n_width), f_hidden()' 
                           for _ in range(n_hidden-1)])
         if f_output:
-            cmd += ', nn.Linear(n_width, 1), f_output())'
+            cmd += ', nn.Linear(n_width, n_outputs), f_output())'
         else:
-            cmd += ', nn.Linear(n_width, 1))'
+            cmd += ', nn.Linear(n_width, n_outputs))'
         cmd  = cmd.replace(', ,', ', ') # Hack!
         
         self.net = eval(cmd)
