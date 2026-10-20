@@ -191,7 +191,7 @@ class FCNN(Model):
         cmd += ', '.join(['nn.Linear(n_width, n_width), f_hidden' 
                           for _ in range(n_hidden-1)])
         if f_output:
-            cmd += ', nn.Linear(n_width, n_outputs), f_output'
+            cmd += ', nn.Linear(n_width, n_outputs), f_output)'
         else:
             cmd += ', nn.Linear(n_width, n_outputs))'
         cmd  = cmd.replace(', ,', ', ') # Hack!
