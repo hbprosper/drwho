@@ -15,9 +15,9 @@ import importlib as _importlib
 
 # Single source of truth for the version: pyproject.toml reads it from here
 # via [tool.setuptools.dynamic]. Bump it here on every release.
-__version__ = "0.3.6"
+__version__ = "0.3.7"
 
-__all__ = ["data", "kdtree", "monitor", "nn"]
+__all__ = ["data", "hmc", "kdtree", "monitor", "nn"]
 
 
 def __getattr__(name):

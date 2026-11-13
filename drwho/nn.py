@@ -172,31 +172,41 @@ class FCNN(Model):
     
     def __init__(self, 
                  n_inputs, 
-                 n_hidden=4, 
+                 n_hidden=2, 
                  n_width=32,
                  n_outputs=1,
-                 f_hidden=Sin(), 
-                 f_output=None):
+                 f_hidden=nn.GELU(),
+                 f_output=None, 
+                 dropout=None):
         
         super().__init__()
-        
+
+        # cache inputs
         self.n_inputs = n_inputs
         self.n_hidden = n_hidden
         self.n_width  = n_width
         self.n_outputs= n_outputs
         self.f_hidden = f_hidden
         self.f_output = f_output
-        
-        cmd  = 'nn.Sequential(nn.Linear(n_inputs, n_width), f_hidden, '
-        cmd += ', '.join(['nn.Linear(n_width, n_width), f_hidden' 
-                          for _ in range(n_hidden-1)])
-        if f_output:
-            cmd += ', nn.Linear(n_width, n_outputs), f_output)'
-        else:
-            cmd += ', nn.Linear(n_width, n_outputs))'
-        cmd  = cmd.replace(', ,', ', ') # Hack!
-        
-        self.net = eval(cmd)
+        self.dropout  = dropout
+
+        # input layer
+        self.net = nn.Sequential(nn.Linear(n_inputs, n_width), f_hidden)
+
+        if self.dropout is not None:
+            self.net.append(nn.Dropout(dropout))
+
+        for _ in range(n_hidden-1):
+            self.net.append(nn.Linear(n_width, n_width))
+            self.net.append(f_hidden) 
+            if self.dropout is not None:
+                self.net.append(nn.Dropout(dropout))
+
+        # output layer
+        self.net.append(nn.Linear(n_width, n_outputs))
+
+        if f_output is not  None:
+            self.net.append(f_output)
 # ----------------------------------------------------------------------------
 # Extreme learning machine
 # experimental

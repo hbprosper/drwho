@@ -14,6 +14,8 @@ import subprocess
 import numpy as np
 from time import sleep
 from pathlib import Path
+# module for shell utilities
+import shutil
 # tensorboard is optional and is imported lazily by _summary_writer() below:
 # torch.utils.tensorboard is slow to import, and most users never ask for it.
 #-------------------------------------------------------------------------
@@ -29,6 +31,13 @@ except:
 import time
 try:
     import matplotlib as mp
+    import matplotlib.pyplot as plt
+    # update fonts
+    plt.rcParams.update({
+  "text.usetex": shutil.which('latex') is not None,
+  "font.family": "sans-serif",
+  "font.size": 14
+    })
 except:
     raise ImportError('''
     Please install matplotlib:
@@ -72,19 +81,18 @@ def elapsed_time(now, start):
     etime_str = "%2.2d:%2.2d:%2.2d" % (hours, minutes, seconds)
     return etime_str, etime, (hours, minutes, seconds)
 
-def plot_loss_curve(losses):
+def plot_loss_curve(losses, filename='fig_losses.png'):
     
     xx, yy_t, yy_v = losses
     
     # create an empty figure
-    fig = plt.figure(figsize=(6, 6*9/16))
-    fig.tight_layout()
-    
+    fig = plt.figure(figsize=(4*16/9, 4))
+
     # add a subplot to it
     nrows, ncols, index = 1,1,1
     ax  = fig.add_subplot(nrows,ncols,index)
     
-    ax.plot(xx, yy_t, color='red',  lw=1, label='training loss')
+    ax.plot(xx, yy_t, color='red',  lw=1, linestyle='dashed', label='training loss')
     ax.plot(xx, yy_v, color='blue', lw=1, label='validation loss')
     ax.legend()
     
@@ -93,9 +101,19 @@ def plot_loss_curve(losses):
     ax.set_xscale('log')
     ax.set_yscale('log')
     ax.grid(True, which="both", linestyle='-')
-
+    fig.tight_layout()
+    plt.savefig(filename)
     plt.show()
 
+def plot_losses(loss_file, filename='fig_losses.png'):
+    losses = get_losses(loss_file)
+    if losses is not None:
+        plot_loss_curve(losses, filename)
+    else:
+        print(f'''
+{WARN} loss file {loss_file} not found!
+        ''')
+    
 class TimeLeft:
     '''
     Return the amount of time left.
@@ -202,7 +220,7 @@ class LossMonitor:
         import matplotlib.pyplot as plt
 
         # set up an empty figure
-        self.fig = plt.figure(figsize=(8, 4))
+        self.fig = plt.figure(figsize=(4*16/9, 4))
         self.fig.suptitle(self.lossfile)
 
         # add a subplot to it
