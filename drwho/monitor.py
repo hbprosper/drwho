@@ -8,6 +8,8 @@
 # Updated: Oct  4 2026 - Draw in the notebook when there is no display.
 # Updated: Oct 19 2026 - Fix: record the best validation loss (min_avloss typo),
 #                         so params are saved only when the loss improves.
+# Updated: Nov 15 2026 - Remove the flicker of the in-notebook loss plot:
+#                         update the output in place, fix the axes frame.
 #-------------------------------------------------------------------------
 import os, sys, re
 import subprocess
@@ -479,6 +481,14 @@ class Monitor:
 
         self.reset()
 
+        # Handles to the in-notebook outputs (loss plot and status line).
+        # They are created by the first call to _inline_update() and then
+        # updated in place. Reset them here so that a second training run
+        # in the same notebook draws a new plot rather than updating the
+        # plot of the previous run.
+        self._plot_handle   = None
+        self._status_handle = None
+
         if self.writer is not None:
             # tensorboard is handling the display
             return
@@ -514,9 +524,29 @@ class Monitor:
 
         Used when no GUI window can be opened (Google Colab, or any headless
         notebook), where the standalone monitor process cannot work.
+
+        How flicker is avoided
+        ----------------------
+        1. The output is updated *in place*. The first call displays the
+           plot (and the status line) with a display handle; later calls
+           replace the contents of that handle. The earlier version cleared
+           the output cell and displayed a new image each time, which made
+           the cell collapse and re-expand, so that the page jumped.
+
+        2. The axes frame is fixed. Log-log axes are used from the start;
+           the x-axis spans the whole run, from the first iteration to the
+           last, so the curve grows into a fixed frame; and the y-axis
+           limits are whole powers of ten, so they change only when the
+           loss crosses into a new decade. Previously, matplotlib chose the
+           limits from the data at every update, so the curve shifted and
+           rescaled each time.
+
+        3. The margins are fixed. tight_layout() recomputes the margins from
+           the widths of the tick labels, which change as the limits change,
+           so the plotting area moved sideways. Fixed margins keep it still.
         '''
         try:
-            from IPython.display import clear_output, display, Image
+            from IPython.display import display, Image, Pretty
         except ImportError:
             if status:
                 print(status)
@@ -528,30 +558,74 @@ class Monitor:
         from matplotlib.figure import Figure
         from matplotlib.backends.backend_agg import FigureCanvasAgg
 
+        # handles to the outputs (see start()); getattr guards against
+        # _inline_update() being called without start() having been called
+        plot_handle   = getattr(self, '_plot_handle', None)
+        status_handle = getattr(self, '_status_handle', None)
+
+        # On the first call, reserve the plot's place with an empty output,
+        # before the status line is displayed. Otherwise, since the first
+        # update usually has too few points to draw a curve, the status line
+        # would be displayed first and the plot would end up below it.
+        if plot_handle is None:
+            plot_handle = self._plot_handle = display(Pretty(''),
+                                                      display_id=True)
+
         losses = get_losses(self.lossfile)
 
-        clear_output(wait=True)
+        have_points = False
 
-        if losses is not None and len(losses[0]) > 1:
+        if losses is not None:
 
             xx, yy_t, yy_v = losses
 
+            # a log scale needs positive values: drop any non-positive
+            # iteration numbers (e.g., iteration 0) and losses
+            keep = (xx > 0) & (yy_t > 0) & (yy_v > 0)
+            xx, yy_t, yy_v = xx[keep], yy_t[keep], yy_v[keep]
+
+            # a curve needs at least two points
+            have_points = len(xx) > 1
+
+        if have_points:
+
             fig = Figure(figsize=(6, 6 * 9 / 16))
+
+            # fixed margins (fractions of the figure width and height),
+            # chosen to leave room for the axis labels
+            fig.subplots_adjust(left=0.16, right=0.97, bottom=0.17, top=0.96)
+
             ax  = fig.add_subplot(1, 1, 1)
 
             ax.plot(xx, yy_t, color='red',  lw=1, label='training loss')
             ax.plot(xx, yy_v, color='blue', lw=1, label='validation loss')
-            ax.legend()
+
+            # log-log from the start (no switch from linear to log)
+            ax.set_xscale('log')
+            ax.set_yscale('log')
+
+            # x: from the first iteration recorded to the last iteration
+            # of this run. offset is nonzero when training resumes and
+            # appends to an existing loss file (newlossfile=False).
+            xmin = xx[0]
+            xmax = max(self.offset + self.niterations, xx[-1])
+            ax.set_xlim(xmin, xmax)
+
+            # y: snap the limits outward to whole powers of ten
+            y = np.concatenate([yy_t, yy_v])
+            ymin = 10**np.floor(np.log10(y.min()))
+            ymax = 10**np.ceil(np.log10(y.max()))
+            if ymax <= ymin:
+                ymax = 10 * ymin   # all losses are an exact power of ten
+            ax.set_ylim(ymin, ymax)
+
+            # fixed legend position: 'best' would move as the curve grows
+            ax.legend(loc='upper right')
             ax.set_xlabel('iterations', fontsize=FONTSIZE)
             ax.set_ylabel('average loss' if self.ylabel is None else self.ylabel,
                           fontsize=FONTSIZE)
 
-            if len(xx) > LOG_SWITCH:
-                ax.set_xscale('log')
-                ax.set_yscale('log')
-
             ax.grid(True, which='both', linestyle='-')
-            fig.tight_layout()
 
             # Render the PNG here rather than handing IPython the Figure:
             # IPython only knows how to draw a Figure once pyplot has been
@@ -559,10 +633,20 @@ class Monitor:
             # cannot assume has happened.
             buf = io.BytesIO()
             FigureCanvasAgg(fig).print_png(buf)
-            display(Image(data=buf.getvalue()))
+            image = Image(data=buf.getvalue())
+
+            # replace the contents of the plot's output in place
+            plot_handle.update(image)
 
         if status:
-            print(status)
+            # The status line also gets its own handle, so that it, too,
+            # is updated in place below the plot, rather than appended.
+            text = Pretty(status)
+
+            if status_handle is None:
+                self._status_handle = display(text, display_id=True)
+            else:
+                status_handle.update(text)
 
     def terminate(self, delay=5):
 
